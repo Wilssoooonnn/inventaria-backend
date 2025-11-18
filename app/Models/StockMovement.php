@@ -15,7 +15,10 @@ class StockMovement extends Model
         'remarks',
         'related_id'
     ];
-    public const UPDATED_AT = null; 
+    protected $casts = [
+        'quantity' => 'decimal:4',
+    ];
+    public const UPDATED_AT = null;
     public function product()
     {
         return $this->belongsTo(Product::class);

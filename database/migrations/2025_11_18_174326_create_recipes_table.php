@@ -10,13 +10,14 @@ return new class extends Migration {
      */
     public function up(): void
     {
-        Schema::create('stocks', function (Blueprint $table) {
+        Schema::create('recipes', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('product_id')->constrained('products')->onDelete('cascade');
-            $table->foreignId('location_id')->constrained('locations')->onDelete('cascade');
-            $table->integer('quantity')->default(0);
+            $table->foreignId('menu_product_id')->constrained('products')->onDelete('cascade');
+            $table->foreignId('ingredient_product_id')->constrained('products')->onDelete('cascade');
+
+            $table->decimal('quantity_used', 10, 4);
+
             $table->timestamps();
-            $table->unique(['product_id', 'location_id']); // constraint
         });
     }
 
@@ -25,6 +26,6 @@ return new class extends Migration {
      */
     public function down(): void
     {
-        Schema::dropIfExists('stocks');
+        Schema::dropIfExists('recipes');
     }
 };

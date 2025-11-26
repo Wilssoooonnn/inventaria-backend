@@ -127,13 +127,16 @@
             const productSelect = document.getElementById('product_id');
             const formStatus = document.getElementById('form-status');
 
-            function updateUnitDisplay() {
+            function getActiveUnit() {
                 const selected = productSelect.options[productSelect.selectedIndex];
-                const unit = selected?.getAttribute('data-unit') || 'pcs';
-                unitDisplay.textContent = unit;
+                return selected?.getAttribute('data-unit') || 'pcs';
+            }
+            function updateUnitDisplay() {
+                unitDisplay.textContent = getActiveUnit();
             }
             productSelect.addEventListener('change', updateUnitDisplay);
-            updateUnitDisplay();
+            productSelect.dispatchEvent(new Event('change'));
+
             form.addEventListener('submit', function (e) {
                 e.preventDefault();
                 formStatus.style.display = 'none';
@@ -141,34 +144,44 @@
                 const formData = new FormData(form);
                 const data = Object.fromEntries(formData.entries());
 
+                const apiToken = document.querySelector('meta[name="api-token"]').content;
+
                 fetch('/api/stock-adjustments', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
+                        'Authorization': `Bearer ${apiToken}`,
                     },
-                    credentials: 'include',
-                    body: JSON.stringify(data)
+                    body: JSON.stringify(data),
                 })
                     .then(r => {
                         if (!r.ok) {
-                            if (r.status === 422) return r.json().then(err => { throw new Error(Object.values(err.errors).flat().join(', ')); });
+                            if (r.status === 422) return r.json().then(err => {
+                                const messages = Object.values(err.errors).flat();
+                                throw new Error('Validasi Gagal: ' + messages.join('; '));
+                            });
                             if (r.status === 403) throw new Error('Akses ditolak. Pastikan login sebagai Admin.');
+                            if (r.status === 401) throw new Error('Sesi kedaluwarsa. Silakan login ulang.');
+
                             throw new Error(`Server error: ${r.status}`);
                         }
                         return r.json();
                     })
                     .then(res => {
-                        formStatus.className = 'bg-green-100 text-green-700 border border-green-200';
-                        formStatus.textContent = `Sukses! Stok sekarang: ${res.current_stock} ${res.unit}`;
+                        const currentUnit = getActiveUnit();
+                        formStatus.className = 'py-4 px-6 rounded-lg text-sm font-medium bg-green-100 text-green-700 border border-green-200';
+                        formStatus.textContent = res.message + `. Stok sekarang: ${res.current_stock} ${currentUnit}`;
                         formStatus.style.display = 'block';
+
                         form.reset();
-                        updateUnitDisplay();
+                        productSelect.dispatchEvent(new Event('change'));
                     })
-                    .catch(err => {
-                        formStatus.className = 'bg-red-100 text-red-700 border border-red-200';
-                        formStatus.textContent = 'Gagal: ' + err.message;
+                    .catch(error => {
+                        formStatus.className = 'py-4 px-6 rounded-lg text-sm font-medium bg-red-100 text-red-700 border border-red-200';
+                        formStatus.textContent = 'Gagal: ' + error.message;
                         formStatus.style.display = 'block';
+                        console.error('AJAX Error:', error);
                     });
             });
         });

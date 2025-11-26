@@ -3,7 +3,8 @@
 
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="api-token"
+        content="{{ Auth::check() ? Auth::user()->createToken('web-ajax', ['admin'])->plainTextToken : '' }}">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
     <title>{{ config('app.name', 'Inventara F&B') }}</title>

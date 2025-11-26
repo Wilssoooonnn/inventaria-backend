@@ -19,12 +19,11 @@ use App\Http\Controllers\Api\SalesController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
-
-
 Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/user', function (Request $request) {
-        return $request->user(); });
+        return $request->user();
+    });
     Route::post('/logout', [AuthController::class, 'logout']);
 
     Route::get('/units', [UnitController::class, 'index']);
@@ -36,11 +35,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware(['auth.admin'])->group(function () {
 
-        Route::post('/stock-adjustments', [StockAdjustmentController::class, 'store']);
+        Route::apiResource('/stock-adjustments', StockAdjustmentController::class)->only(['store', 'index']);
 
-        Route::get('/reports/stock-audit', [ReportController::class, 'stockAudit']);
-        Route::get('/reports/sales-history', [ReportController::class, 'salesHistory']);
-
+        Route::controller(ReportController::class)->prefix('reports')->name('reports.')->group(function () {
+            Route::get('/stock-audit', 'stockAudit')->name('stock-audit');
+            Route::get('/sales-history', 'salesHistory')->name('sales-history');
+        });
 
         Route::apiResource('/products', ProductController::class)->except(['index', 'show']);
 

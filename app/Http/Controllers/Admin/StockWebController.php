@@ -9,6 +9,7 @@ use App\Models\Stock;
 use App\Models\StockMovement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class StockWebController extends Controller
 {

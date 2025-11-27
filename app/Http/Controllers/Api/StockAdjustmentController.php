@@ -30,7 +30,9 @@ class StockAdjustmentController extends Controller
         ]);
 
         $isPositive = in_array($validated['type'], ['inbound', 'adjustment']);
-        $quantityChange = $isPositive ? $validated['quantity_change'] : -$validated['quantity_change'];
+        $quantityChange = $isPositive
+            ? $validated['quantity_change']
+            : -$validated['quantity_change'];
 
         DB::beginTransaction();
         try {
@@ -40,6 +42,13 @@ class StockAdjustmentController extends Controller
                 ['product_id' => $validated['product_id'], 'location_id' => $validated['location_id']],
                 ['quantity' => 0]
             );
+
+            if (!$isPositive && $stock->quantity < $validated['quantity_change']) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Stok tidak mencukupi untuk pengurangan.'
+                ], 422);
+            }
 
             $stock->quantity += $quantityChange;
             $stock->save();

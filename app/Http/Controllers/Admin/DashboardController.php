@@ -25,13 +25,17 @@ class DashboardController extends Controller
             ->where('products.type', 'ingredient')
             ->sum(DB::raw('stocks.quantity * products.purchase_price'));
 
-        $lowStocks = collect([]);
+        $lowStocks = Stock::with(['product.unit'])
+            ->whereHas('product', function ($q) {
+                $q->whereColumn('stock_minimum', '>=', 'stocks.quantity');
+            })
+            ->orderBy('quantity', 'asc')
+            ->get();
 
         $recentMovements = StockMovement::with(['product', 'user:id,name'])
             ->latest()
             ->limit(5)
             ->get();
-
         return view('admin.dashboard.index', compact(
             'todaySales',
             'assetValue',

@@ -19,7 +19,8 @@ Route::middleware(['auth', 'check.admin'])
     ->name('admin.')
     ->group(function () {
 
-        Route::view('/dashboard', 'admin.dashboard.index')->name('dashboard');
+        Route::get('/dashboard', [Admin\DashboardController::class, 'index'])
+            ->name('dashboard');
 
         Route::resource('categories', Admin\CategoryWebController::class)->except(['show']);
         Route::resource('locations', Admin\LocationWebController::class)->except(['show']);

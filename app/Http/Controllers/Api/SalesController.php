@@ -8,33 +8,36 @@ use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Services\RecipeDeductionService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Exception;
 
 class SalesController extends Controller
 {
     protected $recipeDeductionService;
 
-
-
     public function __construct(RecipeDeductionService $recipeDeductionService)
     {
         $this->recipeDeductionService = $recipeDeductionService;
     }
 
-    /**
-     * POST /api/sales
-     * Memproses Penjualan dan Deduce Resep.
-     */
     public function store(Request $request)
     {
-
-        $request->validate([
+        $validated = $request->validate([
             'items' => 'required|array|min:1',
             'items.*.product_id' => 'required|exists:products,id',
             'items.*.quantity' => 'required|integer|min:1',
+            'items.*.price_at_sale' => 'required|numeric|min:0',
+            'items.*.subtotal' => 'required|numeric|min:0',
             'total_amount' => 'required|numeric|min:0',
-            'invoice_number' => 'required|unique:sales,invoice_number',
+            'invoice_number' => 'required|string|unique:sales,invoice_number',
             'location_id' => 'required|exists:locations,id',
+        ]);
+
+        // Log untuk debugging
+        Log::info('Sale Request', [
+            'user_id' => $request->user()->id,
+            'invoice' => $validated['invoice_number'],
+            'items_count' => count($validated['items']),
         ]);
 
         DB::beginTransaction();
@@ -43,47 +46,122 @@ class SalesController extends Controller
             $userId = $request->user()->id;
 
             $sale = Sale::create([
-                'invoice_number' => $request->invoice_number,
+                'invoice_number' => $validated['invoice_number'],
                 'user_id' => $userId,
-                'location_id' => $request->location_id,
-                'total_amount' => $request->total_amount,
+                'location_id' => $validated['location_id'],
+                'total_amount' => $validated['total_amount'],
+                'sale_date' => now(),
             ]);
 
-            foreach ($request->items as $item) {
-
+            // Proses setiap item
+            foreach ($validated['items'] as $item) {
                 SaleItem::create([
                     'sale_id' => $sale->id,
                     'product_id' => $item['product_id'],
                     'quantity' => $item['quantity'],
-                    'price_at_sale' => $item['price_at_sale'] ?? 0,
-                    'subtotal' => $item['subtotal'] ?? 0,
+                    'price_at_sale' => $item['price_at_sale'],
+                    'subtotal' => $item['subtotal'],
                 ]);
 
-                $this->recipeDeductionService->deduct(
-                    $item['product_id'],
-                    $item['quantity'],
-                    $sale->id,
-                    $request->location_id,
-                    $userId
-                );
+                // Deduksi stok berdasarkan resep
+                try {
+                    $this->recipeDeductionService->deduct(
+                        $item['product_id'],
+                        $item['quantity'],
+                        $sale->id,
+                        $validated['location_id'],
+                        $userId
+                    );
+                } catch (Exception $e) {
+                    throw new Exception(
+                        "Gagal memproses item: " . $e->getMessage()
+                    );
+                }
             }
 
+            // Commit transaksi
             DB::commit();
 
+            // Load relasi untuk response
+            $sale->load([
+                'user:id,name,email',
+                'location:id,name',
+                'items.product:id,name,sale_price',
+            ]);
+
+            // Format response sesuai kebutuhan Flutter
             return response()->json([
-                'status' => 'success',
-                'message' => 'Penjualan berhasil diproses. Stok bahan baku telah dipotong.',
-                'data' => $sale->load('items')
+                'success' => true,
+                'message' => 'Transaksi berhasil disimpan',
+                'data' => [
+                    'id' => $sale->id,
+                    'invoice_number' => $sale->invoice_number,
+                    'total_amount' => (float) $sale->total_amount,
+                    'sale_date' => $sale->created_at->toIso8601String(),
+
+                    'user' => [
+                        'id' => $sale->user->id,
+                        'name' => $sale->user->name,
+                    ],
+
+                    'location' => [
+                        'id' => $sale->location->id,
+                        'name' => $sale->location->name,
+                    ],
+
+                    'items' => $sale->items->map(function ($item) {
+                        return [
+                            'id' => $item->id,
+                            'product_id' => $item->product_id,
+                            'product_name' => $item->product->name,
+                            'quantity' => $item->quantity,
+                            'price_at_sale' => (float) $item->price_at_sale,
+                            'subtotal' => (float) $item->subtotal,
+                        ];
+                    })->values(),
+                ],
             ], 201);
 
         } catch (Exception $e) {
             DB::rollBack();
 
+            // Log error
+            Log::error('Sale Failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
 
             return response()->json([
-                'status' => 'error',
-                'message' => 'Transaksi gagal diproses: ' . $e->getMessage(),
+                'success' => false,
+                'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+
+    public function index(Request $request)
+    {
+        $sales = Sale::with([
+                'user:id,name',
+                'items.product:id,name'
+            ])
+            ->orderBy('created_at', 'desc')
+            ->paginate(20);
+
+        return response()->json($sales);
+    }
+
+    public function show($id)
+    {
+        $sale = Sale::with([
+            'user:id,name,email',
+            'location:id,name',
+            'items.product:id,name,sale_price',
+        ])->findOrFail($id);
+
+        return response()->json([
+            'success' => true,
+            'data' => $sale,
+        ]);
     }
 }

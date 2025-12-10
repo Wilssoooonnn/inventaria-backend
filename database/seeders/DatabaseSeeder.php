@@ -10,19 +10,15 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
                 // --- MASTER DATA ---
-            // LocationSeeder::class,
-            // UserSeeder::class,
-            // UnitSeeder::class,
-            // CategorySeeder::class,
+            LocationSeeder::class,
+            UserSeeder::class,
+            UnitSeeder::class,
+            CategorySeeder::class,
 
                 // --- DATA LOGIC ---
-            // ProductSeeder::class,
-            // RecipeSeeder::class,
-            // StockSeeder::class,
-
-                // --- TRANSACTION DATA ---
-            SaleSeeder::class,
-            SaleItemSeeder::class,
+            ProductSeeder::class,
+            RecipeSeeder::class,
+            StockSeeder::class,
         ]);
     }
 }

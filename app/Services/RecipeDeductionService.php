@@ -2,48 +2,61 @@
 
 namespace App\Services;
 
+use App\Models\Product;
 use App\Models\Stock;
 use App\Models\StockMovement;
-use App\Models\Recipe;
 use Exception;
 
 class RecipeDeductionService
 {
     /**
-     * Create a new class instance.
+     * Mengurangi stok bahan sesuai resep menu.
+     *
+     * @param int         $menuProductId   ID produk menu (products.id)
+     * @param int|float   $quantityOrdered Jumlah menu yang dipesan
+     * @param int         $saleId          ID sale (sales.id)
+     * @param int         $locationId      ID lokasi stok (locations.id)
+     * @param int         $userId          ID user yang melakukan transaksi
+     *
+     * @throws \Exception
      */
-    public function deduct(int $menuProductId, int $quantitySold, int $saleId, int $locationId, int $userId): void
+    public function deduct($menuProductId, $quantityOrdered, $saleId, $locationId, $userId)
     {
-        $recipes = Recipe::where('menu_product_id', $menuProductId)->get();
-
-        if ($recipes->isEmpty()) {
+        $menu = Product::with(['recipeIngredients.ingredient'])->findOrFail($menuProductId);
+        if ($menu->recipeIngredients->isEmpty()) {
             return;
         }
 
-        foreach ($recipes as $recipe) {
-            $ingredientId = $recipe->ingredient_product_id;
-            $requiredQty = $recipe->quantity_used * $quantitySold;
-
-            $stock = Stock::where('product_id', $ingredientId)
-                ->where('location_id', $locationId)
-                ->first();
-
-            if (!$stock || $stock->quantity < $requiredQty) {
-                $ingredientName = $stock->product->name ?? 'Bahan Baku Tidak Diketahui';
-                throw new Exception("Stok bahan baku [{$ingredientName}] tidak mencukupi.");
+        foreach ($menu->recipeIngredients as $recipe) {
+            $usage = $recipe->quantity_used * $quantityOrdered;
+            $stock = Stock::firstOrNew([
+                'product_id' => $recipe->ingredient_product_id,
+                'location_id' => $locationId,
+            ]);
+            if ($stock->quantity === null) {
+                $stock->quantity = 0;
+            }
+            $ingredientName = $recipe->ingredient
+                ? $recipe->ingredient->name
+                : 'Bahan tanpa nama';
+            if ($stock->quantity < $usage) {
+                throw new Exception(
+                    "Stok bahan '{$ingredientName}' tidak cukup. " .
+                    "Dibutuhkan {$usage}, tetapi tersisa {$stock->quantity}."
+                );
             }
 
-            $stock->quantity -= $requiredQty;
+            $stock->quantity -= $usage;
             $stock->save();
 
             StockMovement::create([
-                'product_id' => $ingredientId,
-                'location_id' => $locationId,
-                'user_id' => $userId,
-                'type' => 'outbound_recipe',
-                'quantity_change' => -$requiredQty,
-                'remarks' => "Deduction for Sale ID: {$saleId}",
-                'related_id' => $saleId,
+                'product_id'      => $recipe->ingredient_product_id,
+                'location_id'     => $locationId,
+                'user_id'         => $userId,
+                'type'            => 'adjustment',
+                'quantity_change' => -$usage,
+                'reference'       => "SALE #{$saleId}",
+                'remarks'         => "Pemakaian bahan untuk menu {$menu->name}",
             ]);
         }
     }

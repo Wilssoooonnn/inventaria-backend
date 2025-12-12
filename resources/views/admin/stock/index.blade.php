@@ -94,7 +94,7 @@
                                     </td>
                                     <td class="px-6 py-5 text-right">
                                         <div class="text-lg font-bold text-gray-900">
-                                            {{ number_format($stock->quantity, 0) }}
+                                            {{ number_format($stock->quantity, 4) }}
                                             <span class="text-sm font-normal text-gray-500">
                                                 {{ $product->unit->symbol ?? 'pcs' }}
                                             </span>
